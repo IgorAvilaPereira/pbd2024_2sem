@@ -266,6 +266,60 @@ $$ LANGUAGE 'plpgsql';
 --amigo_secreto=# SELECT verificar_participacao(1,30);
 -- verificar_participacao 
 ------------------
+
+--Function para verificar se um participante está em um evento:
+CREATE OR REPLACE FUNCTION media(participante_id_aux integer) RETURNS money AS
+$$
+DECLARE 
+    valor_medio_aux money := 0.0;
+BEGIN
+    select cast(avg(cast(valor_medio as numeric(10,2))) as money) from desejo where participante_id = participante_id_aux into valor_medio_aux;
+    return valor_medio_aux;
+END;
+$$ language 'plpgsql';
+
+-- Procedure para adicionar múltiplos participantes a um evento usando loop:
+-- INSERT INTO participante(nome) values('fred'), ('gunther'), ('JP');
+CREATE OR REPLACE PROCEDURE inserir_participantes(evento_id_aux integer, vet_id integer[]) AS
+$$
+DECLARE
+    pos integer := 0;
+BEGIN
+    pos := 0;
+    while pos < ARRAY_LENGTH(vet_id, 1) LOOP
+        RAISE NOTICE 'EVENTO:%, ELEMENTO:%', evento_id_aux, vet_id[pos+1];
+        BEGIN
+            INSERT INTO evento_participante(evento_id, participante_id) VALUES (evento_id_aux, vet_id[pos+1]);
+       EXCEPTION WHEN OTHERS THEN
+            RAISE NOTICE 'ESTE PARTICIPANTE INEXISTENTE OU JÁ PARTICIPA DO EVENTO';
+       END;    
+        
+        pos := pos + 1;
+    END LOOP;
+
+END;
+$$ LANGUAGE 'plpgsql';
+--call inserir_participantes(1, array[7]);
+
+-- Function para contar o número de participantes em um evento:
+CREATE OR REPLACE FUNCTION qtde_participante(evento_id_aux integer)  returns integer as 
+$$
+declare
+    qtde integer := 0;
+begin
+    IF EXISTS(SELECT * from evento_participante where evento_id = evento_id_aux) THEN
+        SELECT count(*) from evento_participante where evento_id = evento_id_aux into qtde;
+        return qtde;
+    ELSE
+        RETURN 0;
+    END IF; 
+end;
+$$ language 'plpgsql';
+
+
+
+
+
 -- f
 --(1 row)
 
