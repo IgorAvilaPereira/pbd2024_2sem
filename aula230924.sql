@@ -326,3 +326,193 @@ $$ language 'plpgsql';
 --amigo_secreto=# 
 
 
+
+CREATE OR REPLACE PROCEDURE atualizar_valor_medio(integer, money) AS
+$$
+BEGIN
+    update desejo set valor_medio = $2 where participante_id = $1;
+END;
+$$ LANGUAGE 'plpgsql';
+
+-- call atualizar_valor_medio(1, cast(2.00 as money));
+-- call atualizar_valor_medio(1, 2.00::money);
+
+CREATE OR REPLACE PROCEDURE atualizar_valor_medio2(participante_id_aux integer, novo_valor money) AS
+$$
+DECLARE
+    d RECORD;
+BEGIN
+    FOR d IN SELECT * FROM desejo where participante_id = participante_id_aux LOOP
+        UPDATE desejo SET valor_medio = novo_valor where id = d.id;
+    END LOOP;
+END;
+$$ LANGUAGE 'plpgsql';
+
+
+CREATE OR REPLACE FUNCTION verificar_valor_desejo(desejo_id_aux integer, valor_limite money) RETURNS boolean AS
+$$
+BEGIN
+    IF EXISTS (SELECT * FROM desejo where id = desejo_id_aux and valor_medio <= valor_limite) THEN
+        RETURN TRUE;
+    END IF;
+    RETURN FALSE;
+END;
+$$ LANGUAGE 'plpgsql';
+
+-- amigo_secreto=# SELECT * FROM verificar_valor_desejo(2, 1.99::money);
+
+CREATE OR REPLACE PROCEDURE inserir_desejos(participante_id_aux integer, vet_descricao text[], vet_valor_medio money[]) AS
+$$
+DECLARE
+    pos integer := 0;
+BEGIN
+    BEGIN
+        IF ARRAY_LENGTH(vet_descricao, 1) = ARRAY_LENGTH(vet_valor_medio, 1) THEN
+            pos := 0;
+            while pos < ARRAY_LENGTH(vet_descricao, 1) LOOP                
+                INSERT INTO desejo(participante_id, descricao, valor_medio) VALUES (participante_id_aux, vet_descricao[pos+1], vet_valor_medio[pos+1]);             
+                pos := pos + 1;
+            END LOOP;                   
+        END IF;
+    EXCEPTION WHEN OTHERS THEN
+       RAISE NOTICE 'VetDesc tem ter o mesmo tamanho de VetValorMedio';
+    END;
+END;
+$$ LANGUAGE 'plpgsql';
+
+call inserir_desejos(1, array['assinatura chatgpt', 'assinatura copilot'], array[cast(20 as money), cast(1.99 as money)]);
+-- https://neon.tech/docs/functions/array_length
+
+CREATE OR REPLACE FUNCTION tem_desejo(integer) RETURNS BOOLEAN AS
+$$
+BEGIN
+    RETURN EXISTS(SELECT * FROM desejo where participante_id = $1);
+END;
+$$ LANGUAGE 'plpgsql';
+
+-- off-topic: erick
+
+CREATE OR REPLACE FUNCTION tem_desejo2(integer) RETURNS TABLE(desejo_id integer, desejo_descricao text, desejo_valor_medio money) AS
+$$
+BEGIN
+    IF EXISTS(SELECT * FROM desejo where participante_id = $1) THEN
+        RETURN QUERY SELECT id, descricao, valor_medio FROM desejo where participante_id = $1;
+    END IF;
+END;
+$$ LANGUAGE 'plpgsql';
+
+-- id                | integer                     |           | not null | nextval('evento_id_seq'::regclass)
+-- nome              | character varying(150)      |           | not null | 
+-- data_hora_criacao | timestamp without time zone |           |          | CURRENT_TIMESTAMP
+-- data_hora         | timestamp without time zone | 
+
+
+CREATE OR REPLACE FUNCTION listar_eventos_pos(date) RETURNS TABLE (evento_nome character varying(150), evento_data_hora timestamp) AS
+$$
+BEGIN
+    RETURN QUERY SELECT nome, data_hora from evento where cast(data_hora as date) > $1;
+END;
+$$ LANGUAGE 'plpgsql';
+
+--amigo_secreto=# select * from listar_eventos_pos('1900-01-01');
+
+
+--amigo_secreto=# ALTER TABLE participante ADD COLUMN telefone character(11);
+--amigo_secreto=# ALTER TABLE participante ADD COLUMN cpf character(11);
+-- amigo_secreto=# update participante set telefone = '53999668800' where id = 1;
+
+CREATE OR REPLACE FUNCTION mascara_telefone(character(11)) RETURNS TEXT AS 
+$$
+BEGIN
+    RETURN substring($1 from 1 for 2)|| ' '|| substring($1 from 3 for length($1));
+END;
+$$ LANGUAGE 'plpgsql';
+
+--https://www.macoratti.net/alg_cpf.htm
+CREATE OR REPLACE function valida_cpf(character(11)) RETURNS boolean AS
+$$
+DECLARE
+    vet_nro integer[];
+    i integer := 1;
+    multiplicador integer := 10;
+    somatorio integer := 0;
+    resto integer;
+    quociente integer;
+    
+    digito1 integer;
+    digito2 integer;
+BEGIN
+    IF LENGTH($1) != 11 THEN
+        RETURN FALSE;
+    END IF;
+    
+    --  testar todos os nros sendo igual -> pendente
+    IF $1 = REPEAT(substring($1 from i for 1),11) THEN
+        RETURN FALSE;    
+    END IF;
+    
+    while i <= 11 LOOP
+        vet_nro[i] := cast(substring($1 from i for 1) as integer);
+        i := i + 1;
+    END LOOP;       
+    
+    i := 1;
+    while i <= 11 LOOP
+        RAISE NOTICE '%', vet_nro[i];
+        i := i + 1;
+    END LOOP; 
+    
+--  calculo digito 1
+    i := 1;    
+    while i <= 9 LOOP
+        somatorio := somatorio + vet_nro[i]*multiplicador;
+        multiplicador := multiplicador - 1;
+        i := i + 1;
+    END LOOP; 
+    
+    quociente := somatorio / 11;
+    resto := somatorio % 11;
+    
+    if (resto < 2) THEN
+        digito1 := 0;
+    else
+        digito1 := 11 - resto;
+    END IF;
+    
+--  calculo digito 2
+    multiplicador := 11;
+    somatorio := 0;
+    i := 1;    
+    while i <= 10 LOOP
+        somatorio := somatorio + vet_nro[i]*multiplicador;
+        multiplicador := multiplicador - 1;
+        i := i + 1;
+    END LOOP;
+    
+    quociente := somatorio / 11;
+    resto := somatorio % 11;
+    
+      
+    if (resto < 2) THEN
+        digito2 := 0;
+    else
+        digito2 := 11 - resto;
+    END IF;
+    
+    IF vet_nro[10] = digito1 and vet_nro[11] = digito2 then
+        return true;
+    end if;
+    
+    return false;
+    
+END;
+$$ LANGUAGE 'plpgsql';
+
+
+
+
+
+
+
+
+
