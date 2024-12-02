@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tela Adicionar</title>
+</head>
+
+<body>
+    <h1>Adicionar</h1>
+    <form action="/adicionar" method="post">
+        Titulo: <input type="text" name="titulo"> <br>
+        Texto: <textarea name="texto"></textarea> <br>
+        Dono: <select name="usuario_id">
+            <option value="NULL">Ninguém</option>
+            {% for usuario in vetUsuario %}
+            <option value="{{usuario.id}}">{{usuario.email}}</option>
+            {% endfor %}
+        </select>
+        <input type="submit" value="Adicionar">
+    </form>
+</body>
+
+</html>
